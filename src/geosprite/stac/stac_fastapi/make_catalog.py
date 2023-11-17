@@ -10,6 +10,8 @@ import rasterio
 import requests
 from shapely import geometry
 
+from s3_util import list_files_in_s3, read_json_file_in_s3
+
 
 @dataclasses.dataclass
 class Client:
@@ -17,12 +19,12 @@ class Client:
 
     def get(self, path: str):
         response = requests.get(os.path.join(self.domain_url, path))
-        assert response.status_code == 200
+        assert response.status_code == 200, response.status_code
         return response.json()
 
     def post(self, path: str, json_data: str):
         response = requests.post(os.path.join(self.domain_url, path), data=json_data)
-        assert response.status_code == 200
+        assert response.status_code == 200, response.status_code
         return response.json()
 
     def put(self, path: str, json_data: str):
@@ -37,6 +39,7 @@ class Client:
 
 
 def get_bbox_and_geom(image_path: str):
+    print(image_path)
     with rasterio.open(image_path) as ds:
         bounds = ds.bounds
         bbox = [bounds.left, bounds.bottom, bounds.right, bounds.top]
@@ -60,11 +63,18 @@ def get_item_title(item_id: str) -> str:
     min_lng = int(match_min_lng.group(1))
 
     year = item_id.split("_")[-1]
+    part_tile = f"{year} ({min_lng}-{min_lng + 5}E {min_lat}-{min_lat + 5}N)"
 
     if item_id.startswith("aircas_water_distribution_yearly"):
-        return f"Water body distribution of HKH region for {year} ({min_lng}-{min_lng + 5}E {min_lat}-{min_lat + 5}N)"
+        return f"Water body distribution of HKH region for {part_tile}"
     if item_id.startswith("aircas_water_clarity_yearly"):
-        return f"Water clarity of HKH region for {year} ({min_lng}-{min_lng + 5}E {min_lat}-{min_lat + 5}N)"
+        return f"Water clarity of HKH region for {part_tile}"
+    if item_id.startswith("aircas_water_distribution_10m_yearly"):
+        return f"Water body distribution 10m of HKH region for {part_tile}"
+    if item_id.startswith("aircas_forest_grass_yearly"):
+        return f"Forest grass distribution of HKH region for {part_tile}"
+    if item_id.startswith("aircas_fractional_vegetation_coverage_yearly"):
+        return f"Fractional vegetation coverage of HKH region for {part_tile}"
 
 
 def add_asset_to_item(item: pystac.Item, thumbnail_url: str, data_url: str) -> None:
@@ -74,49 +84,42 @@ def add_asset_to_item(item: pystac.Item, thumbnail_url: str, data_url: str) -> N
     item.add_asset(key="data", asset=data_asset)
 
 
-def make_items(collection_id: str, collection_folder: str,
-               collection_thumbnail_url: str, collection_data_url) -> list[pystac.Item]:
+def make_items(collection_id: str, bucket:str, production_name:str, years:list) -> list[pystac.Item]:
     items = []
-    for year in os.listdir(collection_folder):
-        if not year.isdigit():
-            continue
-        year_folder = os.path.join(collection_folder, year)
+    for year in years:
         date_time = datetime.datetime(year=int(year), month=6, day=1)
-        for image_filename in os.listdir(year_folder):
-            item_id = os.path.splitext(image_filename)[0]
-            image_path = os.path.join(year_folder, image_filename)
-            bbox, geom = get_bbox_and_geom(image_path)
+        for image_prefix in list_files_in_s3(bucket=bucket, prefix=f"grid_data/{production_name}/{year}/"):
+            # image_prefix: "grid_data/water_distribution/2000/blabla.tif"
+            basename = os.path.splitext(os.path.basename(image_prefix))[0]
+            bbox, geom = get_bbox_and_geom(f"s3://{bucket}/{image_prefix}")
 
             properties_dict = {
                 "extent": rf"{bbox[1]:.3f}°N~{bbox[3]:.3f}°N,{bbox[0]:.3f}°E~{bbox[2]:.3f}°E",
                 "year": year,
-                "title": get_item_title(item_id)
+                "title": get_item_title(basename)
             }
-            item = pystac.Item(id=item_id, collection=collection_id, bbox=bbox, geometry=geom,
+            item = pystac.Item(id=basename, collection=collection_id, bbox=bbox, geometry=geom,
                                datetime=date_time, properties=properties_dict)
             # add asset
-            thumbnail_filename = os.path.splitext(image_filename)[0] + ".png"
-            thumbnail_url = os.path.join(collection_thumbnail_url, year, thumbnail_filename)
-            data_url = os.path.join(collection_data_url, year, image_filename)
-            add_asset_to_item(item, thumbnail_url, data_url)
+            thumbnail_filename = basename + ".png"
+            thumbnail_prefix = f"thumbnail_data/{production_name}/{year}/{thumbnail_filename}"
+            add_asset_to_item(item, thumbnail_prefix, image_prefix)
             # add item to items
             items.append(item)
     return items
 
 
-def make_collection(stac_client: Client, collection_folder: str,
-                    collection_thumbnail_url: str, collection_data_url: str, collection_tile_url: str):
+def make_collection(stac_client: Client,  bucket:str, production_name:str, years:list):
     # 0.read metadata json file
-    meta_filepath = os.path.join(collection_folder, "metadata.json")
-    with open(meta_filepath) as f:
-        metadata = json.load(f)
+    meta_prefix = f"grid_data/{production_name}/metadata.json"
+    metadata = read_json_file_in_s3(bucket, meta_prefix)
     collection_id = metadata["collection_id"]
     title = metadata["title"]
     description = metadata["description"]
     info = metadata["summaries"]
 
     # 1.extent
-    items = make_items(collection_id, collection_folder, collection_thumbnail_url, collection_data_url)
+    items = make_items(collection_id, bucket, production_name, years)
     # spatial extent
     geoms = set(map(lambda i: geometry.shape(i.geometry).envelope, items))
     collection_bbox = geometry.MultiPolygon(geoms).bounds
@@ -135,13 +138,20 @@ def make_collection(stac_client: Client, collection_folder: str,
     extent = pystac.Extent(spatial=spatial_extent, temporal=temporal_extent)
 
     # 2.summaries
-    tile_urls = []
-    for year in years:
-        tile_url = os.path.join(collection_tile_url, f"{year}/")
-        year_tile = {"year": str(year), "collection_id": collection_id, "url": tile_url}
-        tile_urls.append(year_tile)
-    collection_thumbnail_url = os.path.join(collection_thumbnail_url, "all_thumbnail.png")
-    summaries_dict = {"collection_tile_url": tile_urls, "thumbnail": collection_thumbnail_url, "info": info}
+    # tile_urls = []
+    # for year in years:
+    #     tile_url = os.path.join(collection_tile_url, f"{year}/")
+    #     year_tile = {"year": str(year), "collection_id": collection_id, "url": tile_url}
+    #     tile_urls.append(year_tile)
+
+    collection_thumbnail_prefix = f"thumbnail_data/{production_name}/all_thumbnail.png"
+    legend_prefix = f"grid_data/{production_name}/legend.png"
+
+    summaries_dict = {"abs_path": f"s3://{bucket}/",
+                      "thumbnail_rel_path": collection_thumbnail_prefix,
+                      "legend_rel_path": legend_prefix,
+                      "info": info}
+
     summaries = pystac.Summaries(summaries_dict)
 
     # 4.create collection
@@ -159,23 +169,15 @@ def make_collection(stac_client: Client, collection_folder: str,
         stac_client.post(f"collections/{collection_id}/items/", json.dumps(item.to_dict()))
 
 
-def make_catalog(input_folder: str, stac_client: Client,
-                 thumbnail_url: str, data_url: str, tile_url: str):
-    for production_name in os.listdir(input_folder):
-        collection_folder = os.path.join(input_folder, production_name)
-        collection_thumbnail_url = os.path.join(thumbnail_url, production_name)
-        collection_data_url = os.path.join(data_url, production_name)
-        collection_tile_url = os.path.join(tile_url, production_name)
-        make_collection(stac_client, collection_folder,
-                        collection_thumbnail_url, collection_data_url, collection_tile_url)
-
+def make_catalog(bucket: str, stac_client: Client, production_names:dict):
+    for production_name, years in production_names.items():
+        make_collection(stac_client, bucket, production_name, years)
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-i", "--grid_data_folder", type=str, default="/mnt/disk/xials/hkh/grid_data")
-    parser.add_argument("-a", "--stac_api_socket", type=str, default="10.168.162.111:23456")
-    parser.add_argument("-n", "--nginx_socket", type=str, default="10.168.162.111:28001")
+    parser.add_argument("-b", "--bucket", type=str, default="hkh-sdg")
+    parser.add_argument("-a", "--stac_api_socket", type=str, default="http://127.0.0.1:23456/")
 
     # parser.add_argument("-i", "--grid_data_folder", type=str, default="/home/watercore/data/hkh/grid_data")
     # parser.add_argument("-a", "--stac_api_socket", type=str, default="127.0.0.1:23456")
@@ -185,15 +187,14 @@ def parse_args():
 
 
 def main():
-    args = parse_args()
-    stac_api_url = f"http://{args.stac_api_socket}"
-    thumbnail_url = f"http://{args.nginx_socket}/thumbnail_data"
-    data_url = f"http://{args.nginx_socket}/grid_data"
-    tile_url = f"http://{args.nginx_socket}/tile_data"
+    production_names = {"forest_grass": [2000, 2010, 2020], "fractional_vegetation_coverage": [2000, 2010, 2020],
+                        "water_clarity": [2000, 2010, 2020], "water_distribution": [2000, 2010, 2020],
+                        "water_distribution_10m": [2016, 2017, 2018, 2019, 2020, 2021, 2022]}
 
-    stac_client = Client(domain_url=stac_api_url)
-    make_catalog(input_folder=args.grid_data_folder, stac_client=stac_client,
-                 thumbnail_url=thumbnail_url, data_url=data_url, tile_url=tile_url)
+    args = parse_args()
+    stac_client = Client(domain_url=args.stac_api_socket)
+
+    make_catalog(bucket=args.bucket, stac_client=stac_client, production_names=production_names)
 
 
 if __name__ == "__main__":
