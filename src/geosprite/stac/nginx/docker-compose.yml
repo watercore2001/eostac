@@ -1,0 +1,9 @@
+services:
+  nginx:
+    container_name: hkh_nginx
+    image: nginx
+    ports:
+      - 28001:80
+    volumes:
+      - ./conf.d/:/etc/nginx/conf.d/:ro
+      - /mnt/disk/xials/hkh/:/usr/share/nginx/data/
