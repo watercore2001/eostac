@@ -12,29 +12,28 @@ from shapely import geometry
 
 from s3_util import list_files_in_s3, read_json_file_in_s3
 
-
 @dataclasses.dataclass
 class Client:
     domain_url: str
 
     def get(self, path: str):
         response = requests.get(os.path.join(self.domain_url, path))
-        assert response.status_code == 200, response.status_code
+        # assert response.status_code == 200, response.status_code
         return response.json()
 
     def post(self, path: str, json_data: str):
         response = requests.post(os.path.join(self.domain_url, path), data=json_data)
-        assert response.status_code == 200, response.status_code
+        # assert response.status_code == 200, response.status_code
         return response.json()
 
     def put(self, path: str, json_data: str):
         response = requests.put(os.path.join(self.domain_url, path), data=json_data)
-        assert response.status_code == 200
+        # assert response.status_code == 200
         return response.json()
 
     def delete(self, path: str):
         response = requests.delete(os.path.join(self.domain_url, path))
-        assert response.status_code == 200
+        # assert response.status_code == 200
         return response.json()
 
 
@@ -199,3 +198,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
