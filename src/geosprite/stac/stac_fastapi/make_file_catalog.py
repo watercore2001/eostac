@@ -10,7 +10,6 @@ import rasterio
 import requests
 from shapely import geometry
 
-from s3_util import list_files_in_s3, read_json_file_in_s3
 
 @dataclasses.dataclass
 class Client:
@@ -83,14 +82,15 @@ def add_asset_to_item(item: pystac.Item, thumbnail_url: str, data_url: str) -> N
     item.add_asset(key="data", asset=data_asset)
 
 
-def make_items(collection_id: str, bucket:str, production_name:str, years:list) -> list[pystac.Item]:
+def make_items(collection_id: str, input_folder:str, production_name:str, years:list) -> list[pystac.Item]:
     items = []
     for year in years:
         date_time = datetime.datetime(year=int(year), month=6, day=1)
-        for image_prefix in list_files_in_s3(bucket=bucket, prefix=f"grid_data/{production_name}/{year}/"):
-            # image_prefix: "grid_data/water_distribution/2000/blabla.tif"
-            basename = os.path.splitext(os.path.basename(image_prefix))[0]
-            bbox, geom = get_bbox_and_geom(f"s3://{bucket}/{image_prefix}")
+        year_folder = os.path.join(input_folder, "grid_data", production_name, str(year))
+        for image_path in os.listdir(year_folder):
+
+            basename = os.path.splitext(os.path.basename(image_path))[0]
+            bbox, geom = get_bbox_and_geom(image_path)
 
             properties_dict = {
                 "extent": rf"{bbox[1]:.3f}°N~{bbox[3]:.3f}°N,{bbox[0]:.3f}°E~{bbox[2]:.3f}°E",
@@ -102,23 +102,26 @@ def make_items(collection_id: str, bucket:str, production_name:str, years:list) 
             # add asset
             thumbnail_filename = basename + ".png"
             thumbnail_prefix = f"thumbnail_data/{production_name}/{year}/{thumbnail_filename}"
+            # image_prefix: "grid_data/water_distribution/2000/blabla.tif"
+            image_prefix = os.path.relpath(image_path, input_folder)
             add_asset_to_item(item, thumbnail_prefix, image_prefix)
             # add item to items
             items.append(item)
     return items
 
 
-def make_collection(stac_client: Client,  bucket:str, production_name:str, years:list):
+def make_collection(stac_client: Client, input_folder: str, production_name: str, years: list):
     # 0.read metadata json file
-    meta_prefix = f"grid_data/{production_name}/metadata.json"
-    metadata = read_json_file_in_s3(bucket, meta_prefix)
+    metadata_filepath = os.path.join(input_folder, f"grid_data/{production_name}/metadata.json")
+    with open(metadata_filepath) as file:
+        metadata = json.load(file)
     collection_id = metadata["collection_id"]
     title = metadata["title"]
     description = metadata["description"]
     info = metadata["summaries"]
 
     # 1.extent
-    items = make_items(collection_id, bucket, production_name, years)
+    items = make_items(collection_id, input_folder, production_name, years)
     # spatial extent
     geoms = set(map(lambda i: geometry.shape(i.geometry).envelope, items))
     collection_bbox = geometry.MultiPolygon(geoms).bounds
@@ -146,7 +149,7 @@ def make_collection(stac_client: Client,  bucket:str, production_name:str, years
     collection_thumbnail_prefix = f"thumbnail_data/{production_name}/all_thumbnail.png"
     legend_prefix = f"grid_data/{production_name}/legend.png"
 
-    summaries_dict = {"abs_path": f"s3://{bucket}/",
+    summaries_dict = {"abs_path": input_folder,
                       "thumbnail_rel_path": collection_thumbnail_prefix,
                       "legend_rel_path": legend_prefix,
                       "info": info}
@@ -168,14 +171,14 @@ def make_collection(stac_client: Client,  bucket:str, production_name:str, years
         stac_client.post(f"collections/{collection_id}/items/", json.dumps(item.to_dict()))
 
 
-def make_catalog(bucket: str, stac_client: Client, production_names:dict):
+def make_catalog(input_folder: str, stac_client: Client, production_names:dict):
     for production_name, years in production_names.items():
-        make_collection(stac_client, bucket, production_name, years)
+        make_collection(stac_client, input_folder, production_name, years)
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-b", "--bucket", type=str, default="hkh-sdg")
+    parser.add_argument("-i", "--input_folder", type=str)
     parser.add_argument("-a", "--stac_api_socket", type=str, default="http://127.0.0.1:23456/")
 
     # parser.add_argument("-i", "--grid_data_folder", type=str, default="/home/watercore/data/hkh/grid_data")
@@ -193,7 +196,7 @@ def main():
     args = parse_args()
     stac_client = Client(domain_url=args.stac_api_socket)
 
-    make_catalog(bucket=args.bucket, stac_client=stac_client, production_names=production_names)
+    make_catalog(input_folder=args.input_folder, stac_client=stac_client, production_names=production_names)
 
 
 if __name__ == "__main__":
