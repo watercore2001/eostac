@@ -104,7 +104,7 @@ def make_items(collection_id: str, input_folder:str, production_name:str, years:
             thumbnail_filename = basename + ".png"
             thumbnail_prefix = f"thumbnail_data/{production_name}/{year}/{thumbnail_filename}"
             # image_prefix: "grid_data/water_distribution/2000/blabla.tif"
-            image_prefix = os.path.relpath(image_filename, input_folder)
+            image_prefix = os.path.relpath(image_filepath, input_folder)
             add_asset_to_item(item, thumbnail_prefix, image_prefix)
             # add item to items
             items.append(item)
