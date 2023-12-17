@@ -87,10 +87,11 @@ def make_items(collection_id: str, input_folder:str, production_name:str, years:
     for year in years:
         date_time = datetime.datetime(year=int(year), month=6, day=1)
         year_folder = os.path.join(input_folder, "grid_data", production_name, str(year))
-        for image_path in os.listdir(year_folder):
+        for image_filename in os.listdir(year_folder):
 
-            basename = os.path.splitext(os.path.basename(image_path))[0]
-            bbox, geom = get_bbox_and_geom(image_path)
+            basename = os.path.splitext(os.path.basename(image_filename))[0]
+            image_filepath = os.path.join(year_folder, image_filename)
+            bbox, geom = get_bbox_and_geom(image_filepath)
 
             properties_dict = {
                 "extent": rf"{bbox[1]:.3f}°N~{bbox[3]:.3f}°N,{bbox[0]:.3f}°E~{bbox[2]:.3f}°E",
@@ -103,7 +104,7 @@ def make_items(collection_id: str, input_folder:str, production_name:str, years:
             thumbnail_filename = basename + ".png"
             thumbnail_prefix = f"thumbnail_data/{production_name}/{year}/{thumbnail_filename}"
             # image_prefix: "grid_data/water_distribution/2000/blabla.tif"
-            image_prefix = os.path.relpath(image_path, input_folder)
+            image_prefix = os.path.relpath(image_filename, input_folder)
             add_asset_to_item(item, thumbnail_prefix, image_prefix)
             # add item to items
             items.append(item)
