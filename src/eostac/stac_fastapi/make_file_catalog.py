@@ -111,7 +111,7 @@ def make_items(collection_id: str, input_folder:str, production_name:str, years:
     return items
 
 
-def make_collection(stac_client: Client, input_folder: str, production_name: str, years: list):
+def make_collection(stac_client: Client, nginx_socket: str, input_folder: str, production_name: str, years: list):
     # 0.read metadata json file
     metadata_filepath = os.path.join(input_folder, f"grid_data/{production_name}/metadata.json")
     with open(metadata_filepath) as file:
@@ -150,7 +150,7 @@ def make_collection(stac_client: Client, input_folder: str, production_name: str
     collection_thumbnail_prefix = f"thumbnail_data/{production_name}/all_thumbnail.png"
     legend_prefix = f"grid_data/{production_name}/legend.png"
 
-    summaries_dict = {"abs_path": input_folder,
+    summaries_dict = {"abs_path": nginx_socket,
                       "thumbnail_rel_path": collection_thumbnail_prefix,
                       "legend_rel_path": legend_prefix,
                       "info": info}
@@ -172,19 +172,16 @@ def make_collection(stac_client: Client, input_folder: str, production_name: str
         stac_client.post(f"collections/{collection_id}/items/", json.dumps(item.to_dict()))
 
 
-def make_catalog(input_folder: str, stac_client: Client, production_names:dict):
+def make_catalog(input_folder: str, stac_client: Client, nginx_socket: str, production_names:dict):
     for production_name, years in production_names.items():
-        make_collection(stac_client, input_folder, production_name, years)
+        make_collection(stac_client, nginx_socket, input_folder, production_name, years)
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-i", "--input_folder", type=str)
     parser.add_argument("-a", "--stac_api_socket", type=str, default="http://127.0.0.1:23456/")
-
-    # parser.add_argument("-i", "--grid_data_folder", type=str, default="/home/watercore/data/hkh/grid_data")
-    # parser.add_argument("-a", "--stac_api_socket", type=str, default="127.0.0.1:23456")
-    # parser.add_argument("-n", "--nginx_socket", type=str, default="127.0.0.1:28001")
+    parser.add_argument("-n", "--nginx_socket", type=str, default="http://127.0.0.1:28001/")
 
     return parser.parse_args()
 
@@ -197,7 +194,7 @@ def main():
     args = parse_args()
     stac_client = Client(domain_url=args.stac_api_socket)
 
-    make_catalog(input_folder=args.input_folder, stac_client=stac_client, production_names=production_names)
+    make_catalog(input_folder=args.input_folder, stac_client=stac_client, nginx_socket=args.nginx_socket, production_names=production_names)
 
 
 if __name__ == "__main__":
