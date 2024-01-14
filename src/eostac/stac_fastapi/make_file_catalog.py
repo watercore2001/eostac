@@ -180,8 +180,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-i", "--input_folder", type=str)
-    parser.add_argument("-a", "--stac_api_socket", type=str, default="http://127.0.0.1:23456/")
-    parser.add_argument("-n", "--nginx_socket", type=str, default="http://127.0.0.1:28001/")
+    parser.add_argument("-a", "--stac_api_socket", type=str, default="http://10.168.162.112:23456/")
+    parser.add_argument("-n", "--nginx_socket", type=str, default="http://10.168.162.112:28001/")
 
     return parser.parse_args()
 
