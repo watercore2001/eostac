@@ -1,4 +1,4 @@
-from geosprite.stac.data.module.xyz import raw_to_grid
+from eostac.data.module.xyz import raw_to_grid
 import argparse
 import os
 
@@ -9,7 +9,8 @@ def parse_args():
     parser.add_argument('-o1', '--wgs84_folder', help='destination Folder', type=str, required=True)
     parser.add_argument('-o2', "--grid_folder", help='destination Folder', type=str, required=True)
     parser.add_argument('-g', "--grid_shp_path", help="wgs84 grids", type=str, required=True)
-    parser.add_argument('-f', "--name_format", help="grid name format with four place holder", type=str, required=True)
+    parser.add_argument('-f', "--name_format", help="grid name format with four place holder", type=str,
+                        required=True, default="aircas_{}_yearly_{}_{}_{}")
     return parser.parse_args()
 
 

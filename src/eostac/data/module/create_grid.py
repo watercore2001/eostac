@@ -2,7 +2,7 @@ import math
 
 from osgeo import ogr
 
-from geosprite.stac.data.module.utils import get_block_geom, get_srs_from_epsg, add_feature_to_layer
+from eostac.data.module.utils import get_block_geom, get_srs_from_epsg, add_feature_to_layer
 
 SHP_DRIVER = ogr.GetDriverByName("ESRI Shapefile")
 WGS84_EPSG = 4326

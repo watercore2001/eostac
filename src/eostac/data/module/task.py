@@ -174,12 +174,11 @@ class ReProjection(RasterImageProcess):
             self,
             options: RasterImageProcessOptions,
             output_epsg: int = 4326,
-            nodata: float = 0,
     ):
         super().__init__(options)
         self.split_task()
         self.output_epsg = output_epsg
-        self.options = {"dstSRS": f"epsg:{output_epsg}", "creationOptions": TIF_CREATE_OPTIONS, "dstNodata": nodata}
+        self.options = {"dstSRS": f"epsg:{output_epsg}", "creationOptions": TIF_CREATE_OPTIONS}
 
     def execute(self, src_in_task: list[str], dest_in_task: list[str], **kwargs) -> bool:
         ds = gdal.Open(src_in_task[0])
@@ -196,13 +195,12 @@ class WGS84Grid(RasterImageProcess):
             options: RasterImageProcessOptions,
             grid_shp_path: str,
             name_format: str,
-            nodata: float = 0,
     ):
         super().__init__(options)
         self.name_format = name_format
         self.split_task(grid_shp_path)
         self.options = {"format": options.driver_name, "creationOptions": TIF_CREATE_OPTIONS,
-                        "stats": True, "noData": nodata}
+                        "stats": True}
 
     def dest_filename(self, lng_centre: float, lat_centre: float):
         lng_min = lng_centre - lng_centre % 5

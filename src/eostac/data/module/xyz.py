@@ -5,7 +5,7 @@
 import argparse
 import os
 
-from geosprite.stac.data.module import RasterImageProcessOptions, ReProjection, WGS84Grid, Thumbnail, \
+from eostac.data.module import RasterImageProcessOptions, ReProjection, WGS84Grid, Thumbnail, \
     ColorRamp, XYZTiles
 
 

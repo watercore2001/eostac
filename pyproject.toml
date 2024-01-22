@@ -1,0 +1,24 @@
+[project]
+name = "eostac"
+version = "1.0"
+description = "A package for hkh stac service"
+requires-python = ">=3.10"
+dependencies = [
+    "rasterio ~= 1.3",
+    "pystac ~= 1.8",
+    "fiona ~= 1.9",
+    "shapely ~= 2.0",
+    "requests ~= 2.31",
+    "boto3 ~= 1.29",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+file_stac = "eostac.stac_fastapi.make_file_catalog:main"
+s3_stac = "eostac.stac_fastapi.make_s3_catalog:main"

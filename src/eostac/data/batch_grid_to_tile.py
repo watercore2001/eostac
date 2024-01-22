@@ -1,4 +1,4 @@
-from geosprite.stac.data.module import grid_to_tile
+from eostac.data.module import grid_to_tile
 import argparse
 import os
 

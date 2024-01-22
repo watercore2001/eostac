@@ -8,7 +8,7 @@ from osgeo import gdal
 
 def parse_arg():
     parser = argparse.ArgumentParser()
-    parser.add_argument('-i', '--water_distribution_folder', help='water distribution folder', type=str, required=True)
+    parser.add_argument('-i', '--water_distribution_folder', help='water distribution grid folder', type=str, required=True)
     parser.add_argument('-o1', '--change_folder', help='destination Folder', type=str, required=True)
     parser.add_argument('-o2', '--statistics_folder', help='destination Folder', type=str, required=True)
     parser.add_argument('-o3', '--api_folder', help='destination Folder', type=str, required=True)
