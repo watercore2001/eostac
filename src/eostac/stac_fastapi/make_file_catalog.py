@@ -91,9 +91,8 @@ def add_asset_to_item(item: pystac.Item, thumbnail_url: str, data_url: str) -> N
     item.add_asset(key="data", asset=data_asset)
 
 
-def make_items(collection_id: str, input_folder: str, collection_folder: str) -> list[pystac.Item]:
+def make_items(collection_id: str, root_folder: str, collection_folder: str) -> list[pystac.Item]:
     items = []
-    years = []
 
     for year in os.listdir(os.path.join(collection_folder, "grid")):
         year_folder = os.path.join(collection_folder, "grid", year)
@@ -120,15 +119,15 @@ def make_items(collection_id: str, input_folder: str, collection_folder: str) ->
             thumbnail_filepath = f"{collection_folder}/thumbnail/{year}/{thumbnail_filename}"
 
             # image_prefix: "grid_data/water_distribution/2000/blabla.tif"
-            image_prefix = os.path.relpath(image_filepath, input_folder)
-            thumbnail_prefix = os.path.relpath(thumbnail_filepath, input_folder)
+            image_prefix = os.path.relpath(image_filepath, root_folder)
+            thumbnail_prefix = os.path.relpath(thumbnail_filepath, root_folder)
             add_asset_to_item(item, thumbnail_prefix, image_prefix)
             # add item to items
             items.append(item)
     return items
 
 
-def make_collection(stac_client: Client, nginx_socket: str, input_folder: str, collection_folder: str):
+def make_collection(stac_client: Client, nginx_socket: str, root_folder: str, collection_folder: str):
     # 0.read metadata json file
     metadata_filepath = os.path.join(collection_folder, "grid", "metadata.json")
     with open(metadata_filepath) as file:
@@ -139,7 +138,7 @@ def make_collection(stac_client: Client, nginx_socket: str, input_folder: str, c
     info = metadata["summaries"]
 
     # 1.extent
-    items = make_items(collection_id, input_folder, collection_folder)
+    items = make_items(collection_id, root_folder, collection_folder)
     # spatial extent
     geoms = set(map(lambda i: geometry.shape(i.geometry).envelope, items))
     collection_bbox = geometry.MultiPolygon(geoms).bounds
@@ -163,9 +162,11 @@ def make_collection(stac_client: Client, nginx_socket: str, input_folder: str, c
     #     tile_url = os.path.join(collection_tile_url, f"{year}/")
     #     year_tile = {"year": str(year), "collection_id": collection_id, "url": tile_url}
     #     tile_urls.append(year_tile)
+    collection_thumbnail = os.path.join(collection_folder, "thumbnail", "all_thumbnail.png")
+    collection_thumbnail_prefix = os.path.relpath(collection_thumbnail, root_folder)
 
-    collection_thumbnail_prefix = f"thumbnail_data/{production_name}/all_thumbnail.png"
-    legend_prefix = f"grid_data/{production_name}/legend.png"
+    legend = os.path.join(collection_folder, "grid", "legend.png")
+    legend_prefix = os.path.relpath(legend, root_folder)
 
     summaries_dict = {"abs_path": nginx_socket,
                       "thumbnail_rel_path": collection_thumbnail_prefix,
@@ -189,18 +190,19 @@ def make_collection(stac_client: Client, nginx_socket: str, input_folder: str, c
         stac_client.post(f"collections/{collection_id}/items/", json.dumps(item.to_dict()))
 
 
-def make_catalog(input_folder: str, stac_client: Client, nginx_socket: str):
-    for catalog in os.listdir(input_folder):
-        catalog_folder = os.path.join(catalog)
+def make_catalog(root: str, stac_client: Client, nginx_socket: str):
+    for catalog in os.listdir(root):
+        catalog_folder = os.path.join(root, catalog)
 
-        for collection_name in os.listdir(catalog_folder):
-            collection_folder = os.path.join(catalog_folder, collection_name)
-            make_collection(stac_client, nginx_socket, input_folder, collection_folder)
+        for collection in os.listdir(catalog_folder):
+            collection_folder = os.path.join(catalog_folder, collection)
+            make_collection(stac_client, nginx_socket, root, collection_folder)
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-i", "--input_folder", type=str, default="/mnt/disk/geodata/hkh/data/")
+    parser.add_argument("-i", "--input_folder", type=str, default="/mnt/disk/geodata/hkh/data/stac/")
     parser.add_argument("-a", "--stac_api_socket", type=str, default="http://10.168.162.112:23456/")
     parser.add_argument("-n", "--nginx_socket", type=str, default="http://10.168.162.112:28001/")
 
@@ -211,7 +213,7 @@ def main():
     args = parse_args()
     stac_client = Client(domain_url=args.stac_api_socket)
 
-    make_catalog(input_folder=args.input_folder, stac_client=stac_client, nginx_socket=args.nginx_socket)
+    make_catalog(root=args.input_folder, stac_client=stac_client, nginx_socket=args.nginx_socket)
 
 
 if __name__ == "__main__":
