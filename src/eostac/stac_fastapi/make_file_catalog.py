@@ -101,7 +101,8 @@ def make_items(collection_id: str, root_folder: str, collection_folder: str) -> 
         date_time = datetime.datetime(year=int(year), month=6, day=1)
 
         for image_filename in os.listdir(year_folder):
-
+            if not image_filename.endswith(".tif"):
+                continue
             basename = os.path.splitext(os.path.basename(image_filename))[0]
             image_filepath = os.path.join(year_folder, image_filename)
             bbox, geom = get_bbox_and_geom(image_filepath)
