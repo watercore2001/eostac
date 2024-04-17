@@ -73,6 +73,15 @@ def get_item_title(item_id: str) -> str:
         return f"Forest grass distribution of HKH region for {part_tile}"
     if item_id.startswith("aircas_fractional_vegetation_coverage_yearly"):
         return f"Fractional vegetation coverage of HKH region for {part_tile}"
+    if item_id.startswith("aircas_land_cover_yearly"):
+        return f"Land cover of HKH region for {part_tile}"
+    if item_id.startswith("aircas_land_utilization_intensity_yearly"):
+        return f"Land utilization intensity of HKH region for {part_tile}"
+    if item_id.startswith("aircas_labor_output_yearly"):
+        return f"Labor output of HKH region for {part_tile}"
+    if item_id.startswith("aircas_bio_mass_yearly"):
+        return f"Bio mass of HKH region for {part_tile}"
+    raise Exception
 
 
 def add_asset_to_item(item: pystac.Item, thumbnail_url: str, data_url: str) -> None:
@@ -82,11 +91,16 @@ def add_asset_to_item(item: pystac.Item, thumbnail_url: str, data_url: str) -> N
     item.add_asset(key="data", asset=data_asset)
 
 
-def make_items(collection_id: str, input_folder:str, production_name:str, years:list) -> list[pystac.Item]:
+def make_items(collection_id: str, input_folder: str, collection_folder: str) -> list[pystac.Item]:
     items = []
-    for year in years:
+    years = []
+
+    for year in os.listdir(os.path.join(collection_folder, "grid")):
+        year_folder = os.path.join(collection_folder, "grid", year)
+        if not os.path.isdir(year_folder):
+            continue
         date_time = datetime.datetime(year=int(year), month=6, day=1)
-        year_folder = os.path.join(input_folder, "grid_data", production_name, str(year))
+
         for image_filename in os.listdir(year_folder):
 
             basename = os.path.splitext(os.path.basename(image_filename))[0]
@@ -98,22 +112,25 @@ def make_items(collection_id: str, input_folder:str, production_name:str, years:
                 "year": year,
                 "title": get_item_title(basename)
             }
+
             item = pystac.Item(id=basename, collection=collection_id, bbox=bbox, geometry=geom,
                                datetime=date_time, properties=properties_dict)
             # add asset
             thumbnail_filename = basename + ".png"
-            thumbnail_prefix = f"thumbnail_data/{production_name}/{year}/{thumbnail_filename}"
+            thumbnail_filepath = f"{collection_folder}/thumbnail/{year}/{thumbnail_filename}"
+
             # image_prefix: "grid_data/water_distribution/2000/blabla.tif"
             image_prefix = os.path.relpath(image_filepath, input_folder)
+            thumbnail_prefix = os.path.relpath(thumbnail_filepath, input_folder)
             add_asset_to_item(item, thumbnail_prefix, image_prefix)
             # add item to items
             items.append(item)
     return items
 
 
-def make_collection(stac_client: Client, nginx_socket: str, input_folder: str, production_name: str, years: list):
+def make_collection(stac_client: Client, nginx_socket: str, input_folder: str, collection_folder: str):
     # 0.read metadata json file
-    metadata_filepath = os.path.join(input_folder, f"grid_data/{production_name}/metadata.json")
+    metadata_filepath = os.path.join(collection_folder, "grid", "metadata.json")
     with open(metadata_filepath) as file:
         metadata = json.load(file)
     collection_id = metadata["collection_id"]
@@ -122,7 +139,7 @@ def make_collection(stac_client: Client, nginx_socket: str, input_folder: str, p
     info = metadata["summaries"]
 
     # 1.extent
-    items = make_items(collection_id, input_folder, production_name, years)
+    items = make_items(collection_id, input_folder, collection_folder)
     # spatial extent
     geoms = set(map(lambda i: geometry.shape(i.geometry).envelope, items))
     collection_bbox = geometry.MultiPolygon(geoms).bounds
@@ -172,14 +189,18 @@ def make_collection(stac_client: Client, nginx_socket: str, input_folder: str, p
         stac_client.post(f"collections/{collection_id}/items/", json.dumps(item.to_dict()))
 
 
-def make_catalog(input_folder: str, stac_client: Client, nginx_socket: str, production_names:dict):
-    for production_name, years in production_names.items():
-        make_collection(stac_client, nginx_socket, input_folder, production_name, years)
+def make_catalog(input_folder: str, stac_client: Client, nginx_socket: str):
+    for catalog in os.listdir(input_folder):
+        catalog_folder = os.path.join(catalog)
+
+        for collection_name in os.listdir(catalog_folder):
+            collection_folder = os.path.join(catalog_folder, collection_name)
+            make_collection(stac_client, nginx_socket, input_folder, collection_folder)
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-i", "--input_folder", type=str)
+    parser.add_argument("-i", "--input_folder", type=str, default="/mnt/disk/geodata/hkh/data/")
     parser.add_argument("-a", "--stac_api_socket", type=str, default="http://10.168.162.112:23456/")
     parser.add_argument("-n", "--nginx_socket", type=str, default="http://10.168.162.112:28001/")
 
@@ -187,14 +208,10 @@ def parse_args():
 
 
 def main():
-    production_names = {"forest_grass": [2000, 2010, 2020], "fractional_vegetation_coverage": [2000, 2010, 2020],
-                        "water_clarity": [2000, 2010, 2020], "water_distribution": [2000, 2010, 2020],
-                        "water_distribution_10m": [2016, 2017, 2018, 2019, 2020, 2021, 2022]}
-
     args = parse_args()
     stac_client = Client(domain_url=args.stac_api_socket)
 
-    make_catalog(input_folder=args.input_folder, stac_client=stac_client, nginx_socket=args.nginx_socket, production_names=production_names)
+    make_catalog(input_folder=args.input_folder, stac_client=stac_client, nginx_socket=args.nginx_socket)
 
 
 if __name__ == "__main__":
