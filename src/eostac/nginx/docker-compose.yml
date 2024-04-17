@@ -6,4 +6,4 @@ services:
       - 28001:80
     volumes:
       - ./conf.d/:/etc/nginx/conf.d/:ro
-      - /mnt/disk/geodata/hkh/data/:/usr/share/nginx/data/
+      - /mnt/disk/geodata/hkh/data/stac/:/usr/share/nginx/data/
