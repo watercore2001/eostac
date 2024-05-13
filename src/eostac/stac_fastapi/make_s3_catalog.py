@@ -10,7 +10,7 @@ import rasterio
 import requests
 from shapely import geometry
 
-from eostac/stac_fastapi/s3_util import list_files_in_s3, read_json_file_in_s3
+from eostac.stac_fastapi.s3_util import list_files_in_s3, read_json_file_in_s3
 
 @dataclasses.dataclass
 class Client:
